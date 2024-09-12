@@ -122,32 +122,23 @@ func main() {
 
 	// ... your code ...
 
-	go func() {
-		for {
-			select {
-			case id, ok := <-server.TeleConnected():
-				if !ok {
-					return
-				}
-
-                time.Sleep(1 * time.Second)
-                
-                server.PowerOn(id)
-                
-                time.Sleep(1 * time.Second)
-                
-                server.PowerOff(id)
-                
-                time.Sleep(1 * time.Second)
-                
-                server.PowerToggle(id)
-                
-                time.Sleep(1 * time.Second)
-                
-                server.PowerOff(id)
-			}
-		}
-	}()
+	// connected with id
+    time.Sleep(1 * time.Second)
+    
+    server.PowerOn(id)
+    
+    time.Sleep(1 * time.Second)
+    
+    server.PowerOff(id)
+    
+    time.Sleep(1 * time.Second)
+    
+    server.PowerToggle(id)
+    
+    time.Sleep(1 * time.Second)
+    
+    server.PowerOff(id)
+    // connected with id
 
 	// stop
 	// ...
@@ -167,31 +158,22 @@ func main() {
 
 	// ... your code ...
 
-	go func() {
-		for {
-			select {
-			case id, ok := <-server.TeleConnected():
-				if !ok {
-					return
-				}
+	// connected with id
+    value, _ := StatusPhysicalButton(id)
+    log.Println(id, "PhysicalButton", value)
 
-                value, _ := StatusPhysicalButton(id)
-                log.Println(id, "PhysicalButton", value)
-
-                time.Sleep(1 * time.Second)
-                
-                server.PhysicalButtonOn(id)
-				value, _ = StatusPhysicalButton(id)
-                log.Println(id, "PhysicalButton", value)
-                
-                time.Sleep(1 * time.Second)
-                
-                server.PhysicalButtonOff(id)
-				value, _ = StatusPhysicalButton(id)
-                log.Println(id, "PhysicalButton", value)
-			}
-		}
-	}()
+    time.Sleep(1 * time.Second)
+    
+    server.PhysicalButtonOn(id)
+    value, _ = StatusPhysicalButton(id)
+    log.Println(id, "PhysicalButton", value)
+    
+    time.Sleep(1 * time.Second)
+    
+    server.PhysicalButtonOff(id)
+    value, _ = StatusPhysicalButton(id)
+    log.Println(id, "PhysicalButton", value)
+    // connected with id
 
 	// stop
 	// ...
@@ -211,30 +193,21 @@ func main() {
 
 	// ... your code ...
 
-	go func() {
-		for {
-			select {
-			case id, ok := <-server.TeleConnected():
-				if !ok {
-					return
-				}
-
-                time.Sleep(1 * time.Second)
-                
-                server.PowerOn(id)
-                
-                response, _ = server.StatusZero(id)
-                log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
-                
-                time.Sleep(1 * time.Second)
-                
-                server.PowerOff(id)
-                
-                response, _ = server.StatusZero(id)
-                log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
-			}
-		}
-	}()
+	// connected with id
+    time.Sleep(1 * time.Second)
+    
+    server.PowerOn(id)
+    
+    response, _ = server.StatusZero(id)
+    log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
+    
+    time.Sleep(1 * time.Second)
+    
+    server.PowerOff(id)
+    
+    response, _ = server.StatusZero(id)
+    log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
+    // connected with id
 
 	// stop
 	// ...
