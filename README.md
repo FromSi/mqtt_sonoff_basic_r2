@@ -27,40 +27,40 @@ More on the file `cmd/without_server/main.go`
 package main
 
 import (
-	sonoff "github.com/fromsi/mqtt_sonoff_basic_r2"
-	"os"
-	"os/signal"
-	"syscall"
+    sonoff "github.com/fromsi/mqtt_sonoff_basic_r2"
+    "os"
+    "os/signal"
+    "syscall"
 )
 
 func main() {
-	// init
+    // init
 
-	sigSystem := make(chan os.Signal, 1)
+    sigSystem := make(chan os.Signal, 1)
 
-	signal.Notify(sigSystem, syscall.SIGINT, syscall.SIGTERM)
+    signal.Notify(sigSystem, syscall.SIGINT, syscall.SIGTERM)
 
-	server, err := sonoff.NewSonoffBasicR2("", 1883, 0)
+    server, err := sonoff.NewSonoffBasicR2("", 1883, 0)
 
-	if err != nil {
-		panic(err.Error())
-	}
+    if err != nil {
+        panic(err.Error())
+    }
 
-	// run
+    // run
 
-	go func() {
-		_ = server.Serve()
-	}()
+    go func() {
+        _ = server.Serve()
+    }()
 
-	// ... your code ...
-	// ...
+    // ... your code ...
+    // ...
 
-	// stop
+    // stop
 
-	select {
-	case <-sigSystem:
-		_ = server.Close()
-	}
+    select {
+    case <-sigSystem:
+        _ = server.Close()
+    }
 }
 
 ```
@@ -70,42 +70,42 @@ func main() {
 //...
 
 func main() {
-	// init
-	// ...
+    // init
+    // ...
 
-	// run
-	// ...
+    // run
+    // ...
 
-	// ... your code ...
+    // ... your code ...
 
-	go func() {
-		for {
-			select {
-			case id, ok := <-server.TeleConnected():
-				if !ok {
-					return
-				}
+    go func() {
+        for {
+            select {
+            case id, ok := <-server.TeleConnected():
+                if !ok {
+                    return
+                }
 
-				log.Println("Connected", id)
-			}
-		}
-	}()
+                log.Println("Connected", id)
+            }
+        }
+    }()
 
-	go func() {
-		for {
-			select {
-			case id, ok := <-server.TeleDisconnected():
-				if !ok {
-					return
-				}
+    go func() {
+        for {
+            select {
+            case id, ok := <-server.TeleDisconnected():
+                if !ok {
+                    return
+                }
 
-				log.Println("Disconnected", id)
-			}
-		}
-	}()
+                log.Println("Disconnected", id)
+            }
+        }
+    }()
 
-	// stop
-	// ...
+    // stop
+    // ...
 }
 ```
 
@@ -114,15 +114,15 @@ func main() {
 //...
 
 func main() {
-	// init
-	// ...
+    // init
+    // ...
 
-	// run
-	// ...
+    // run
+    // ...
 
-	// ... your code ...
+    // ... your code ...
 
-	// connected with id
+    // connected with id
     time.Sleep(1 * time.Second)
     
     server.PowerOn(id)
@@ -140,8 +140,8 @@ func main() {
     server.PowerOff(id)
     // connected with id
 
-	// stop
-	// ...
+    // stop
+    // ...
 }
 ```
 
@@ -150,15 +150,15 @@ func main() {
 //...
 
 func main() {
-	// init
-	// ...
+    // init
+    // ...
 
-	// run
-	// ...
+    // run
+    // ...
 
-	// ... your code ...
+    // ... your code ...
 
-	// connected with id
+    // connected with id
     value, _ := StatusPhysicalButton(id)
     log.Println(id, "PhysicalButton", value)
 
@@ -175,8 +175,8 @@ func main() {
     log.Println(id, "PhysicalButton", value)
     // connected with id
 
-	// stop
-	// ...
+    // stop
+    // ...
 }
 ```
 
@@ -185,15 +185,15 @@ func main() {
 //...
 
 func main() {
-	// init
-	// ...
+    // init
+    // ...
 
-	// run
-	// ...
+    // run
+    // ...
 
-	// ... your code ...
+    // ... your code ...
 
-	// connected with id
+    // connected with id
     time.Sleep(1 * time.Second)
     
     server.PowerOn(id)
@@ -209,8 +209,8 @@ func main() {
     log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
     // connected with id
 
-	// stop
-	// ...
+    // stop
+    // ...
 }
 ```
 
@@ -221,38 +221,38 @@ More on the (mochi-mqtt/server)[https://github.com/mochi-mqtt/server]
 package main
 
 import (
-	sonoff "github.com/fromsi/mqtt_sonoff_basic_r2"
-	mqtt "github.com/mochi-mqtt/server/v2"
-	mqttauth "github.com/mochi-mqtt/server/v2/hooks/auth"
-	"github.com/mochi-mqtt/server/v2/listeners"
+    sonoff "github.com/fromsi/mqtt_sonoff_basic_r2"
+    mqtt "github.com/mochi-mqtt/server/v2"
+    mqttauth "github.com/mochi-mqtt/server/v2/hooks/auth"
+    "github.com/mochi-mqtt/server/v2/listeners"
 )
 
 func main() {
-	server := mqtt.New(
-		&mqtt.Options{
-			InlineClient: true,
-		},
-	)
+    server := mqtt.New(
+        &mqtt.Options{
+            InlineClient: true,
+        },
+    )
 
-	tcp := listeners.NewTCP(listeners.Config{ID: "t1", Address: ":1883"})
-	_ = server.AddListener(tcp)
-	_ = server.AddHook(new(mqttauth.AllowHook), nil)
+    tcp := listeners.NewTCP(listeners.Config{ID: "t1", Address: ":1883"})
+    _ = server.AddListener(tcp)
+    _ = server.AddHook(new(mqttauth.AllowHook), nil)
 
-	sonoffServer, _ := sonoff.NewSonoffBasicR2WithServer(server, 2)
+    sonoffServer, _ := sonoff.NewSonoffBasicR2WithServer(server, 2)
 	
-	// run
+    // run
 
-	go func() {
-		_ = sonoffServer.Serve()
-		_ = server.Serve()
-	}()
+    go func() {
+        _ = sonoffServer.Serve()
+        _ = server.Serve()
+    }()
 
-	// more on the file `cmd/without_server/main.go`
-	// ... your code ...
+    // more on the file `cmd/without_server/main.go`
+    // ... your code ...
 
-	// stop
+    // stop
 
-	sonoffServer.Close()
-	server.Close()
+    sonoffServer.Close()
+    server.Close()
 }
 ```
