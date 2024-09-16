@@ -63,35 +63,35 @@ func main() {
 
 				log.Println("Connected", id)
 
-				response, _ := sonoffServer.StatusZero(id)
+				response, _ := sonoffServer.Status(id)
 				log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
 
 				time.Sleep(1 * time.Second)
 
 				sonoffServer.PowerOn(id)
 
-				response, _ = sonoffServer.StatusZero(id)
+				response, _ = sonoffServer.Status(id)
 				log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
 
 				time.Sleep(1 * time.Second)
 
 				sonoffServer.PowerOff(id)
 
-				response, _ = sonoffServer.StatusZero(id)
+				response, _ = sonoffServer.Status(id)
 				log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
 
 				time.Sleep(1 * time.Second)
 
 				sonoffServer.PowerToggle(id)
 
-				response, _ = sonoffServer.StatusZero(id)
+				response, _ = sonoffServer.Status(id)
 				log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
 
 				time.Sleep(1 * time.Second)
 
 				sonoffServer.PowerOff(id)
 
-				response, _ = sonoffServer.StatusZero(id)
+				response, _ = sonoffServer.Status(id)
 				log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
 			}
 		}

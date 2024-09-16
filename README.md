@@ -198,14 +198,14 @@ func main() {
     
     server.PowerOn(id)
     
-    response, _ = server.StatusZero(id)
+    response, _ = server.Status(id)
     log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
     
     time.Sleep(1 * time.Second)
     
     server.PowerOff(id)
     
-    response, _ = server.StatusZero(id)
+    response, _ = server.Status(id)
     log.Println(response.Status.Topic, "POWER", response.Status.Power, "TIME", response.StatusTIM.Local.ToTime().String())
     // connected with id
 
