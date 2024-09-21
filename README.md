@@ -9,7 +9,7 @@ go get github.com/formsi/mqtt_sonoff_basic_r2
 
 **Note:** Current lib uses [Go Modules](https://go.dev/wiki/Modules) to manage dependencies.
 
-**Note 2:** Шаблон для full topic: `%prefix%/%topic%/`
+**Note 2:** Template for full topic: `%prefix%/%topic%/`
 
 ## Features
 * Functions to start or stop the server
