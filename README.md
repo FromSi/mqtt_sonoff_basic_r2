@@ -215,7 +215,7 @@ func main() {
 ```
 
 ### Using the library as a wrapper for your server 
-More on the (mochi-mqtt/server)[https://github.com/mochi-mqtt/server]
+More on the [mochi-mqtt/server](https://github.com/mochi-mqtt/server)
 
 ```go
 package main

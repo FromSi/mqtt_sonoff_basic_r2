@@ -16,10 +16,108 @@ import (
 	"time"
 )
 
+// DefaultCtxCmndResponseTimeoutInSeconds is default value for ctxCmndResponseTimeoutInSeconds
+const DefaultCtxCmndResponseTimeoutInSeconds = 10
+
+// MQTT topic prefixes used by Tasmota firmware for communication
+const (
+	// TasmotaPrefixTele is used for telemetry topics that report device status at regular intervals.
+	TasmotaPrefixTele = "tele"
+
+	// TasmotaPrefixStat is used for status topics, which report the device's response to commands or state changes.
+	TasmotaPrefixStat = "stat"
+
+	// TasmotaPrefixCmnd is used for command topics to send instructions to the device.
+	TasmotaPrefixCmnd = "cmnd"
+)
+
+// MQTT telemetry (tele) topics
+const (
+	// TasmotaTeleTopicLWT is the Last Will and Testament topic used by Tasmota devices to report their availability.
+	TasmotaTeleTopicLWT = "LWT"
+
+	// TasmotaTeleTopicLWTValueAll subscribes to all LWT topics.
+	TasmotaTeleTopicLWTValueAll = "+"
+
+	// TasmotaTeleTopicLWTResponseOnline is the message indicating that the device is online.
+	TasmotaTeleTopicLWTResponseOnline = "Online"
+
+	// TasmotaTeleTopicLWTResponseOffline is the message indicating that the device is offline.
+	TasmotaTeleTopicLWTResponseOffline = "Offline"
+)
+
+// MQTT command (cmnd) topics
+const (
+	// TasmotaCmndTopicStatus requests the status of the device.
+	TasmotaCmndTopicStatus = "STATUS"
+
+	// TasmotaCmndTopicStatusAll requests the status of all device components.
+	TasmotaCmndTopicStatusAll = "STATUS0"
+
+	// TasmotaCmndTopicPower controls the power state of the device (on, off, toggle).
+	TasmotaCmndTopicPower = "POWER"
+
+	// TasmotaCmndTopicPowerValueOn turns the device power on.
+	TasmotaCmndTopicPowerValueOn = "ON"
+
+	// TasmotaCmndTopicPowerValueOff turns the device power off.
+	TasmotaCmndTopicPowerValueOff = "OFF"
+
+	// TasmotaCmndTopicPowerValueToggle toggles the device power between on and off.
+	TasmotaCmndTopicPowerValueToggle = "TOGGLE"
+
+	// TasmotaCmndTopicPhysicalButton configures the physical button behavior (SETOPTION73).
+	TasmotaCmndTopicPhysicalButton = "SETOPTION73"
+
+	// TasmotaCmndTopicPhysicalButtonValueOn disables the physical button.
+	TasmotaCmndTopicPhysicalButtonValueOn = "0"
+
+	// TasmotaCmndTopicPhysicalButtonValueOff enables the physical button.
+	TasmotaCmndTopicPhysicalButtonValueOff = "1"
+)
+
+// MQTT status (stat) topics
+const (
+	// TasmotaStatTopicResult provides the result of a command execution.
+	TasmotaStatTopicResult = "RESULT"
+
+	// TasmotaStatTopicStatus is the general status response topic.
+	TasmotaStatTopicStatus = "STATUS0"
+
+	// TasmotaStatTopicStatusOne to TasmotaStatTopicStatusEleven represent different status responses of the device.
+	TasmotaStatTopicStatusOne         = "STATUS1"
+	TasmotaStatTopicStatusOneValue    = "1"
+	TasmotaStatTopicStatusTwo         = "STATUS2"
+	TasmotaStatTopicStatusTwoValue    = "2"
+	TasmotaStatTopicStatusThree       = "STATUS3"
+	TasmotaStatTopicStatusThreeValue  = "3"
+	TasmotaStatTopicStatusFour        = "STATUS4"
+	TasmotaStatTopicStatusFourValue   = "4"
+	TasmotaStatTopicStatusFive        = "STATUS5"
+	TasmotaStatTopicStatusFiveValue   = "5"
+	TasmotaStatTopicStatusSix         = "STATUS6"
+	TasmotaStatTopicStatusSixValue    = "6"
+	TasmotaStatTopicStatusSeven       = "STATUS7"
+	TasmotaStatTopicStatusSevenValue  = "7"
+	TasmotaStatTopicStatusEight       = "STATUS8"
+	TasmotaStatTopicStatusEightValue  = "8"
+	TasmotaStatTopicStatusEleven      = "STATUS11"
+	TasmotaStatTopicStatusElevenValue = "11"
+)
+
+// MochiMQTTV2 is interface to support dependency inversion
+type MochiMQTTV2 interface {
+	Serve() error
+	Close() error
+	Subscribe(filter string, subscriptionId int, handler mqtt.InlineSubFn) error
+	Unsubscribe(filter string, subscriptionId int) error
+	Publish(topic string, payload []byte, retain bool, qos byte) error
+}
+
 // SonoffBasicR2 is a struct that manages MQTT connections to a Sonoff Basic R2 device using the Tasmota firmware.
 // It handles device commands, status checks, and power control over MQTT.
 type SonoffBasicR2 struct {
-	server                          *mqtt.Server
+	server                          MochiMQTTV2
 	qos                             byte
 	isOwnServer                     bool
 	connected                       chan string
@@ -61,9 +159,9 @@ func NewSonoffBasicR2(ip string, port uint16, qos byte) (*SonoffBasicR2, error) 
 		server:                          server,
 		qos:                             qos,
 		isOwnServer:                     true,
-		connected:                       make(chan string),
-		disconnected:                    make(chan string),
-		ctxCmndResponseTimeoutInSeconds: 10,
+		connected:                       make(chan string, 1),
+		disconnected:                    make(chan string, 1),
+		ctxCmndResponseTimeoutInSeconds: DefaultCtxCmndResponseTimeoutInSeconds,
 		mainContext:                     mainContext,
 		mainContextCancel:               mainContextCancel,
 	}, nil
@@ -71,20 +169,17 @@ func NewSonoffBasicR2(ip string, port uint16, qos byte) (*SonoffBasicR2, error) 
 
 // NewSonoffBasicR2WithServer initializes a SonoffBasicR2 instance with an external MQTT server.
 // The server must have the InlineClient option enabled.
-func NewSonoffBasicR2WithServer(server *mqtt.Server, qos byte) (*SonoffBasicR2, error) {
-	if !server.Options.InlineClient {
-		return nil, errors.New("inline_client must be true")
-	}
-
+// Warning: inline_client must be true.
+func NewSonoffBasicR2WithServer(server MochiMQTTV2, qos byte) (*SonoffBasicR2, error) {
 	mainContext, mainContextCancel := context.WithCancel(context.Background())
 
 	return &SonoffBasicR2{
 		server:                          server,
 		qos:                             qos,
 		isOwnServer:                     false,
-		connected:                       make(chan string),
-		disconnected:                    make(chan string),
-		ctxCmndResponseTimeoutInSeconds: 10,
+		connected:                       make(chan string, 1),
+		disconnected:                    make(chan string, 1),
+		ctxCmndResponseTimeoutInSeconds: DefaultCtxCmndResponseTimeoutInSeconds,
 		mainContext:                     mainContext,
 		mainContextCancel:               mainContextCancel,
 	}, nil
@@ -114,10 +209,10 @@ func (sonoffBasicR2 SonoffBasicR2) TeleDisconnected() <-chan string {
 // It handles the telemetric connection status (`LWT` - Last Will and Testament) from Tasmota devices.
 func (sonoffBasicR2 SonoffBasicR2) Serve() error {
 	// Subscribe to telemetric messages for connection status (Online/Offline)
-	topicTeleConnected := sonoffBasicR2.getFullTeleTopic("+", "LWT")
+	topicTeleConnected := sonoffBasicR2.getFullTeleTopic(TasmotaTeleTopicLWTValueAll, TasmotaTeleTopicLWT)
 	subscribeConnected := func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
 		// If the device is online, send the ID to the connected channel
-		if string(pk.Payload) == "Online" {
+		if string(pk.Payload) == TasmotaTeleTopicLWTResponseOnline {
 			select {
 			case sonoffBasicR2.connected <- strings.Split(pk.TopicName, "/")[1]:
 			case <-sonoffBasicR2.mainContext.Done():
@@ -131,10 +226,10 @@ func (sonoffBasicR2 SonoffBasicR2) Serve() error {
 		return err
 	}
 
-	topicTeleDisconnected := sonoffBasicR2.getFullTeleTopic("+", "LWT")
+	topicTeleDisconnected := sonoffBasicR2.getFullTeleTopic(TasmotaTeleTopicLWTValueAll, TasmotaTeleTopicLWT)
 	subscribeDisconnected := func(cl *mqtt.Client, sub packets.Subscription, pk packets.Packet) {
 		// If the device is offline, send the ID to the disconnected channel
-		if string(pk.Payload) == "Offline" {
+		if string(pk.Payload) == TasmotaTeleTopicLWTResponseOffline {
 			select {
 			case sonoffBasicR2.disconnected <- strings.Split(pk.TopicName, "/")[1]:
 			case <-sonoffBasicR2.mainContext.Done():
@@ -175,7 +270,7 @@ func (sonoffBasicR2 SonoffBasicR2) Close() error {
 // This includes the device's overall configuration and current state.
 // The response is unmarshaled into the AutoGenerated structure.
 func (sonoffBasicR2 SonoffBasicR2) Status(id string) (*Status, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS0", "STATUS0", "")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatusAll, TasmotaStatTopicStatus, "")
 
 	if err != nil {
 		return nil, err
@@ -187,7 +282,7 @@ func (sonoffBasicR2 SonoffBasicR2) Status(id string) (*Status, error) {
 // StatusOne retrieves specific system-related information (STATUS 1) from the Sonoff device.
 // This includes details like uptime, boot count, and other system parameters.
 func (sonoffBasicR2 SonoffBasicR2) StatusOne(id string) (*StatusOne, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS", "STATUS1", "1")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatus, TasmotaStatTopicStatusOne, TasmotaStatTopicStatusOneValue)
 
 	if err != nil {
 		return nil, err
@@ -199,7 +294,7 @@ func (sonoffBasicR2 SonoffBasicR2) StatusOne(id string) (*StatusOne, error) {
 // StatusTwo retrieves firmware-related information (STATUS 2) from the Sonoff device.
 // This includes firmware version, build date, and other firmware-specific data.
 func (sonoffBasicR2 SonoffBasicR2) StatusTwo(id string) (*StatusTwo, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS", "STATUS2", "2")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatus, TasmotaStatTopicStatusTwo, TasmotaStatTopicStatusTwoValue)
 
 	if err != nil {
 		return nil, err
@@ -211,7 +306,7 @@ func (sonoffBasicR2 SonoffBasicR2) StatusTwo(id string) (*StatusTwo, error) {
 // StatusThree retrieves logging-related settings (STATUS 3) from the Sonoff device.
 // This includes serial, web, and MQTT log configurations.
 func (sonoffBasicR2 SonoffBasicR2) StatusThree(id string) (*StatusThree, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS", "STATUS3", "3")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatus, TasmotaStatTopicStatusThree, TasmotaStatTopicStatusThreeValue)
 
 	if err != nil {
 		return nil, err
@@ -223,7 +318,7 @@ func (sonoffBasicR2 SonoffBasicR2) StatusThree(id string) (*StatusThree, error) 
 // StatusFour retrieves memory and storage-related information (STATUS 4) from the Sonoff device.
 // This includes program size, free heap space, flash size, and other memory metrics.
 func (sonoffBasicR2 SonoffBasicR2) StatusFour(id string) (*StatusFour, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS", "STATUS4", "4")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatus, TasmotaStatTopicStatusFour, TasmotaStatTopicStatusFourValue)
 
 	if err != nil {
 		return nil, err
@@ -235,7 +330,7 @@ func (sonoffBasicR2 SonoffBasicR2) StatusFour(id string) (*StatusFour, error) {
 // StatusFive retrieves network configuration details (STATUS 5) from the Sonoff device.
 // This includes IP address, gateway, subnet mask, and DNS server information.
 func (sonoffBasicR2 SonoffBasicR2) StatusFive(id string) (*StatusFive, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS", "STATUS5", "5")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatus, TasmotaStatTopicStatusFive, TasmotaStatTopicStatusFiveValue)
 
 	if err != nil {
 		return nil, err
@@ -247,7 +342,7 @@ func (sonoffBasicR2 SonoffBasicR2) StatusFive(id string) (*StatusFive, error) {
 // StatusSix retrieves MQTT configuration information (STATUS 6) from the Sonoff device.
 // This includes MQTT host, port, client ID, and other MQTT settings.
 func (sonoffBasicR2 SonoffBasicR2) StatusSix(id string) (*StatusSix, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS", "STATUS6", "6")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatus, TasmotaStatTopicStatusSix, TasmotaStatTopicStatusSixValue)
 
 	if err != nil {
 		return nil, err
@@ -259,7 +354,7 @@ func (sonoffBasicR2 SonoffBasicR2) StatusSix(id string) (*StatusSix, error) {
 // StatusSeven retrieves time and date settings (STATUS 7) from the Sonoff device.
 // This includes local time, daylight savings settings, and timezone information.
 func (sonoffBasicR2 SonoffBasicR2) StatusSeven(id string) (*StatusSeven, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS", "STATUS7", "7")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatus, TasmotaStatTopicStatusSeven, TasmotaStatTopicStatusSevenValue)
 
 	if err != nil {
 		return nil, err
@@ -271,7 +366,7 @@ func (sonoffBasicR2 SonoffBasicR2) StatusSeven(id string) (*StatusSeven, error) 
 // StatusEight retrieves sensor data (STATUS 8) from the Sonoff device.
 // This includes the most recent readings from the device's sensors.
 func (sonoffBasicR2 SonoffBasicR2) StatusEight(id string) (*StatusEight, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS", "STATUS8", "8")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatus, TasmotaStatTopicStatusEight, TasmotaStatTopicStatusEightValue)
 
 	if err != nil {
 		return nil, err
@@ -283,7 +378,7 @@ func (sonoffBasicR2 SonoffBasicR2) StatusEight(id string) (*StatusEight, error) 
 // StatusEleven retrieves runtime status information (STATUS 11) from the Sonoff device.
 // This includes uptime, heap usage, WiFi information, and more.
 func (sonoffBasicR2 SonoffBasicR2) StatusEleven(id string) (*StatusEleven, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "STATUS", "STATUS11", "11")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicStatus, TasmotaStatTopicStatusEleven, TasmotaStatTopicStatusElevenValue)
 
 	if err != nil {
 		return nil, err
@@ -295,7 +390,7 @@ func (sonoffBasicR2 SonoffBasicR2) StatusEleven(id string) (*StatusEleven, error
 // StatusPhysicalButton retrieves the current configuration of the physical button on the Sonoff device.
 // It checks the status of SetOption73, which controls whether the physical button is enabled (OFF) or disabled (ON).
 func (sonoffBasicR2 SonoffBasicR2) StatusPhysicalButton(id string) (bool, error) {
-	response, err := sonoffBasicR2.getCmndResponse(id, "SETOPTION73", "RESULT", "")
+	response, err := sonoffBasicR2.getCmndResponse(id, TasmotaCmndTopicPhysicalButton, TasmotaStatTopicResult, "")
 
 	if err != nil {
 		return false, err
@@ -319,35 +414,35 @@ func (sonoffBasicR2 SonoffBasicR2) StatusPhysicalButton(id string) (bool, error)
 
 // PowerOn sends an MQTT command to turn on the device.
 func (sonoffBasicR2 SonoffBasicR2) PowerOn(id string) {
-	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, "POWER")
-	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte("ON"), false, sonoffBasicR2.qos)
+	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, TasmotaCmndTopicPower)
+	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte(TasmotaCmndTopicPowerValueOn), false, sonoffBasicR2.qos)
 }
 
 // PowerOff sends an MQTT command to turn off the device.
 func (sonoffBasicR2 SonoffBasicR2) PowerOff(id string) {
-	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, "POWER")
-	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte("OFF"), false, sonoffBasicR2.qos)
+	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, TasmotaCmndTopicPower)
+	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte(TasmotaCmndTopicPowerValueOff), false, sonoffBasicR2.qos)
 }
 
 // PowerToggle sends an MQTT command to toggle the power state of the Sonoff device.
 // It switches the power between ON and OFF, depending on the current state.
 func (sonoffBasicR2 SonoffBasicR2) PowerToggle(id string) {
-	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, "POWER")
-	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte("TOGGLE"), false, sonoffBasicR2.qos)
+	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, TasmotaCmndTopicPower)
+	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte(TasmotaCmndTopicPowerValueToggle), false, sonoffBasicR2.qos)
 }
 
 // PhysicalButtonOn sends an MQTT command to enable the physical button on the Sonoff device.
 // This allows the device's physical button to control power toggling. It corresponds to the Tasmota command SetOption73.
 func (sonoffBasicR2 SonoffBasicR2) PhysicalButtonOn(id string) {
-	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, "SETOPTION73")
-	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte("0"), false, sonoffBasicR2.qos)
+	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, TasmotaCmndTopicPhysicalButton)
+	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte(TasmotaCmndTopicPhysicalButtonValueOn), false, sonoffBasicR2.qos)
 }
 
 // PhysicalButtonOff sends an MQTT command to disable the physical button on the Sonoff device.
 // This prevents the device's physical button from toggling the power. It corresponds to the Tasmota command SetOption73.
 func (sonoffBasicR2 SonoffBasicR2) PhysicalButtonOff(id string) {
-	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, "SETOPTION73")
-	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte("1"), false, sonoffBasicR2.qos)
+	topicCmnd := sonoffBasicR2.getFullCmndTopic(id, TasmotaCmndTopicPhysicalButton)
+	_ = sonoffBasicR2.server.Publish(topicCmnd, []byte(TasmotaCmndTopicPhysicalButtonValueOff), false, sonoffBasicR2.qos)
 }
 
 // generateSubscriptionId generates a unique subscription ID for MQTT topics using a random number generator.
@@ -363,19 +458,19 @@ func (sonoffBasicR2 SonoffBasicR2) getFullTopic(prefix string, id string, topic 
 // getFullStatTopic constructs the full MQTT topic for device status ("stat") messages.
 // It combines the topic prefix "stat", the device ID, and the specific status topic.
 func (sonoffBasicR2 SonoffBasicR2) getFullStatTopic(id string, topic string) string {
-	return sonoffBasicR2.getFullTopic("stat", id, topic)
+	return sonoffBasicR2.getFullTopic(TasmotaPrefixStat, id, topic)
 }
 
 // getFullCmndTopic constructs the full MQTT topic for command ("cmnd") messages.
 // It combines the topic prefix "cmnd", the device ID, and the specific command topic.
 func (sonoffBasicR2 SonoffBasicR2) getFullCmndTopic(id string, topic string) string {
-	return sonoffBasicR2.getFullTopic("cmnd", id, topic)
+	return sonoffBasicR2.getFullTopic(TasmotaPrefixCmnd, id, topic)
 }
 
 // getFullTeleTopic constructs the full MQTT topic for telemetry ("tele") messages.
 // It combines the topic prefix "tele", the device ID, and the specific telemetry topic.
 func (sonoffBasicR2 SonoffBasicR2) getFullTeleTopic(id string, topic string) string {
-	return sonoffBasicR2.getFullTopic("tele", id, topic)
+	return sonoffBasicR2.getFullTopic(TasmotaPrefixTele, id, topic)
 }
 
 // getCmndResponse sends a command to the Sonoff device and waits for a response.
@@ -411,7 +506,7 @@ func (sonoffBasicR2 SonoffBasicR2) getCmndResponse(id string, topicCmnd string, 
 	// Subscribe to the status topic to receive the response
 	err := sonoffBasicR2.server.Subscribe(fullTopicStat, subscriptionId, subscribeResponse)
 
-	defer func(server *mqtt.Server, filter string, subscriptionId int) {
+	defer func(server MochiMQTTV2, filter string, subscriptionId int) {
 		_ = server.Unsubscribe(filter, subscriptionId)
 	}(sonoffBasicR2.server, fullTopicStat, subscriptionId)
 
